@@ -76,12 +76,15 @@ function buildFragmentShader(marchSteps: number): string {
     }
 
     vec3 calcNormal(vec3 p) {
-      vec2 e = vec2(0.002, 0.0);
-      return normalize(vec3(
+      vec2 e = vec2(0.01, 0.0);
+      vec3 n = vec3(
         sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
         sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
         sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
-      ));
+      );
+      float len = length(n);
+      if (len < 0.0001) return vec3(0.0, 1.0, 0.0);
+      return n / len;
     }
 
     vec3 blobColor(vec3 p) {
@@ -115,19 +118,18 @@ function buildFragmentShader(marchSteps: number): string {
       for (int i = 0; i < ${marchSteps}; i++) {
         p = ro + rd * t;
         d = sceneSDF(p);
-        if (d < 0.005) {
+        if (d < 0.01) {
           hit = true;
           break;
         }
-        t += d * 0.8; // slightly conservative step
-        if (t > 25.0) break;
+        t += d * 0.6; // conservative step to avoid overshooting into surface
+        if (t > 20.0) break;
       }
 
       if (!hit) {
         // Soft glow even on miss — atmospheric haze from nearby blobs
         float glow = 0.0;
         for (int i = 0; i < 5; i++) {
-          // Sample glow along the ray at a mid-point
           vec3 midP = ro + rd * 5.0;
           float dist = length(midP - uBlobPositions[i]) - uBlobRadii[i];
           glow += uBlobRadii[i] * 0.15 / (dist * dist + 0.3);
@@ -163,7 +165,7 @@ function buildFragmentShader(marchSteps: number): string {
       float spec = pow(max(dot(normal, halfDir), 0.0), 32.0);
 
       // Combine
-      vec3 litColor = color * (ambient + 0.55 * diffuse) + fresnel * color * 0.35 + spec * 0.15;
+      vec3 litColor = clamp(color * (ambient + 0.55 * diffuse) + fresnel * color * 0.35 + spec * 0.15, 0.0, 1.0);
 
       // Depth fade
       float depthFade = smoothstep(20.0, 2.0, t);
